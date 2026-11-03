@@ -1,77 +1,77 @@
-# WorkPulse — Self-Hosted Face Recognition Upgrade
+# Super International Travels — Luxury Travel Website
 
-This is an updated copy of the existing WorkPulse Next.js SaaS project. Replaces AWS Rekognition with a dedicated, private CPU OpenCV service (YuNet + SFace). Includes 3–5 face samples per employee, per-tenant protected templates, kiosk face matching, and existing attendance/payroll integration.
+**Ready-to-upload static website:** no React, Vite, npm, Node, database or build command required.
 
-## Important before running
+## Open the website immediately
 
-- **No pretrained model weights are bundled.** Download YuNet/SFace model files from official OpenCV Zoo after checking the license terms for your intended commercial deployment. OpenCV Zoo's repository is Apache-2.0; individual model licenses must be checked separately.
-- **An additional inference host is required.** Vercel hosts Next.js and Supabase stores private templates. The `face-service` runs separately in Docker on a cloud VM/service supporting OpenCV (or on a company-controlled computer with a reachable HTTPS endpoint). Simply connecting Vercel + Supabase will **not** enable recognition.
-- **No liveness/anti-spoofing in this build.** Do not rely on selfie recognition alone for unattended financial or payroll-related decisions. Do not enroll real employees until the company has established lawful basis, given required notice, addressed data retention and alternatives, and completed security tests.
-- A key security consideration: templates are sensitive biometric identifiers; app denies direct client reads of `face_templates`, and only server routes using the service role after checking organization or kiosk token can access them.
+1. Unzip the folder.
+2. Double-click `index.html`. The website will open in your browser.
+3. Internet access is needed for the Unsplash destination photographs and Google Fonts. Local logo, navigation, layouts, visa content, package details and enquiry preparation also work offline.
+4. Use the menu to open the other pages. Every package has its own detailed itinerary.
 
-## A. Upgrade the existing Supabase database
+## Pages included
 
-Run `supabase/face_upgrade.sql` in your **existing** WorkPulse Supabase project's SQL editor. It is additive; don't re-run the original `schema.sql` if you already have the tables. The private `face_templates` table stores 128-length SFace normalized vectors (JSONB), up to 5 per employee. Original AWS `face_id` string is retained for the enrollment status UI (new local values start with `local:`); no new AWS face IDs are produced.
+- `index.html` — Luxury homepage
+- `services.html` — Travel/visa services
+- `packages.html` — Six destination cards with category filters
+- `singapore-visa.html` — Dedicated Singapore visa guide, checklist, fee breakdown and FAQs
+- `contact.html` — Client enquiry preparation form
+- `destinations/*.html` — Individual Singapore, Thailand, Dubai, Goa, Germany and Switzerland itineraries
 
-## B. Download models and start private face inference
+## Client details — edit only one file
 
-From `face-service/`, put the following exact files inside `models/`:
+Open **`assets/site-config.js`** and replace the blank values with actual information:
 
-- `face_detection_yunet_2023mar.onnx` (YuNet)
-- `face_recognition_sface_2021dec.onnx` (SFace)
-
-Official repository: https://github.com/opencv/opencv_zoo
-
-Example direct source URLs (review licenses and integrity before downloading):
-
-```bash
-mkdir -p face-service/models
-curl -fL https://github.com/opencv/opencv_zoo/raw/main/models/face_detection_yunet/face_detection_yunet_2023mar.onnx -o face-service/models/face_detection_yunet_2023mar.onnx
-curl -fL https://github.com/opencv/opencv_zoo/raw/main/models/face_recognition_sface/face_recognition_sface_2021dec.onnx -o face-service/models/face_recognition_sface_2021dec.onnx
+```js
+window.SIT_CONFIG = {
+  brand: "Super International Travels",
+  whatsapp: "919876543210", // REPLACE with real WhatsApp number, digits only
+  phone: "+91 98765 43210", // REPLACE
+  email: "hello@your-domain.com", // REPLACE
+  address: "Real office address, India", // REPLACE
+  logoFile: "logo-placeholder.svg"
+};
 ```
 
-Create a long random token, e.g. `openssl rand -hex 32`; configure **the same value** as `FACE_SERVICE_TOKEN` on the face-service host and in Vercel (server-side only). Never send this token to the browser.
+**Important:** The sample numbers and email shown above are documentation EXAMPLES, not set in the actual website. No rival firm's details are used. The contact form does not collect or transmit information to a server. With WhatsApp configured, the prepared message opens WhatsApp; the user must click Send. With only email configured it opens a mailto draft. Without either, the form offers a copyable enquiry in preview mode. For automatic CRM/email delivery use a secure form backend later.
 
-For local testing:
+## Change logo later
 
-```bash
-cd face-service
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-export FACE_SERVICE_TOKEN='your-long-random-token'
-uvicorn main:app --host 127.0.0.1 --port 8000
-```
+1. Put the client logo in `assets/` as `logo.png` (or SVG).
+2. Change `logoFile` to `"logo.png"` inside `assets/site-config.js`.
+3. Both header and footer logos update automatically. The current compass mark is an editable placeholder, not the client's official logo.
 
-For cloud: build `face-service/Dockerfile`, deploy on your own host with **HTTPS** and restrict access to the WorkPulse Vercel backend where possible; use rate limiting and private network access before production. Set `FACE_SERVICE_URL=https://YOUR-INFERENCE-HOST` and `FACE_SERVICE_TOKEN` in Vercel Production variables. `http://127.0.0.1:8000` only works for locally hosted Next.js, **not** Vercel.
+## Upload to GitHub Pages — no build needed
 
-## C. Next.js app
+1. Create a **public GitHub repository** (e.g. `super-international-travels`).
+2. Upload the **contents of this extracted folder** (not the ZIP itself) into the repository root.
+3. Go to **Settings → Pages → Build and deployment**.
+4. Choose **Deploy from a branch**, branch **main**, folder **/(root)**, then **Save**.
+5. The published website will be at `https://YOUR-USERNAME.github.io/super-international-travels/`.
+6. For a custom domain open **Settings → Pages → Custom domain**, enter the purchased domain and follow GitHub's current DNS instructions. Don't guess DNS IP values; use the official GitHub documentation.
+7. Turn on **Enforce HTTPS** once the certificate is issued. Add a `CNAME` file containing only the custom domain if GitHub Pages didn't automatically create one.
 
-```bash
-npm install
-cp .env.example .env.local
-# Fill in Supabase, FACE_SERVICE_URL and FACE_SERVICE_TOKEN
-npm run dev
-```
+**Alternative:** Import the repo into Vercel, select **Other** framework, leave build command blank, output directory `.` and deploy as static. For GitHub Pages, the included relative page links and assets are already compatible with project subpaths.
 
-In Vercel, add `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `FACE_SERVICE_URL`, `FACE_SERVICE_TOKEN` then redeploy. Old AWS variables are no longer used by this build.
+## Must confirm before launch
 
-## D. Demo flow
+- Real contact phone, WhatsApp, email, office address, logo and domain.
+- Any direct authorisation/partnership claims: this website **does not** claim that the agency itself is an appointed Singapore visa agent.
+- Singapore visa displayed **₹4,634 is a draft illustrative quote**, not a confirmed charge. Based on a third-party ₹3,634 published fee plus proposed ₹1,000 assistance; governmental/authorised agent charges are separate. Tax/legal review and real supplier quote are needed before publishing a rate.
+- The six holiday packages are **original sample itinerary concepts**, with prices on request. No supplier inventory, flights or hotels have been booked, checked or priced. These are **not** copied tour packages from another website.
+- Final terms, refund policies, privacy notice and business registration details should be approved by the client before taking payment or collecting sensitive documents.
 
-1. Admin logs in, opens **Employees**, adds employee with hourly or monthly rate.
-2. Click **Enroll Face**, capture 3–5 samples, then **Save Face Samples**. Each photo must have exactly one sufficiently large face.
-3. Admin opens **Office Kiosks**, generates a unique device token, pastes it once on the `/kiosk` page for each mounted device.
-4. Employee presses **CLOCK IN**, the kiosk captures image, sends it to server. Server authenticates kiosk, loads only enrolled templates in that organization, calls private match service, writes attendance on recognized match.
-5. Employee presses **CLOCK OUT** when leaving. Attendance and simplified payroll draft update in admin.
+## Reference information
 
-## Technical details and caveats
+Singapore High Commission (New Delhi) — visa requirements, Form 14A and government fees:
+https://new-delhi.mfa.gov.sg/consular-services/visa-information/
 
-- Python service calculates 128-d SFace embeddings and normalized cosine similarity. `FACE_COSINE_THRESHOLD=0.48` and margin `0.08` are conservative **starting values only**, not validated for your population/cameras; calibrate on a consented representative local dataset. Reject low-confidence/ambiguous matches.
-- Kiosk token remains a shared device secret in its browser localStorage. Mount devices securely, limit access, rotate stolen tokens, and implement per-kiosk server-side rate limiting before production.
-- Webcam photo matching **does not confirm liveness**; photo/video spoofing is possible. Add licensed liveness capability and manual exception review before wage processing.
-- Store sensitive biometric data only while needed. Provide a removal path, defined retention/deletion, explicit role restrictions, privacy notice and appropriate lawful basis. Avoid sending screenshots containing secrets.
-- The existing payroll is illustrative: paid leave, overtime rules, statutory deductions, shift anomalies, wage-rate history, overnight shifts and correction workflows are incomplete. Do not auto-pay wages from this MVP.
-- Existing face enrollments created with AWS must be re-enrolled using the new model. Templates are not interoperable.
-- Batch replacement of templates is not transactional; database RPC/transaction is recommended for production.
-- Multiple concurrent scans could race on attendance state checks; use a PostgreSQL transaction/lock for commercial deployment.
-- This package has not been live-tested against your deployed Vercel/Supabase project or physical kiosks. Perform staged end-to-end tests before real use.
+Published reference Singapore visa charge (Pristine Visas, 2026):
+https://pristinevisas.com/documents.html
+
+Singapore ICA visa processing info:
+https://ask.gov.sg/ica/questions/clos83fw101o55k0w392mpaai
+
+## Photography
+
+Destination photographs are pulled from the official **images.unsplash.com** CDN with verified matching subject matter. The site requires Internet access to display them. For a totally offline visual build, download appropriately licensed photos and replace their URLs in the generated HTML files with local paths; follow licence/attribution requirements. See `IMAGE_CREDITS.md`.

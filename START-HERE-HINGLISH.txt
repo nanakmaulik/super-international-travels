@@ -1,0 +1,27 @@
+SUPER INTERNATIONAL TRAVELS — START HERE
+========================================
+
+Bhai is version mein Node, npm, React, build command kuch nahi chahiye.
+
+1) ZIP extract karo.
+2) Extracted folder ka index.html double-click karo.
+3) Browser mein homepage khul jayega. Top menu se baaki pages kholna.
+4) Photo images online Unsplash se load hoti hain, so Internet ON rakho.
+5) Client ka WhatsApp, phone, address, email edit karne ke liye:
+       assets/site-config.js
+   Khali quotes "" mein actual details daal do.
+6) Logo mila to assets/logo.png mein daalo aur site-config.js ke
+   logoFile ko "logo.png" kar do.
+7) GitHub Pages: GitHub repo mein full contents upload karo,
+   Settings > Pages > Deploy from a branch > main > /(root).
+8) Custom domain: GitHub Pages > Custom domain, DNS details
+   GitHub jo bole wahi set karna.
+
+IMPORTANT BEFORE LIVE:
+- Singapore visa ka 4634 INR quote proposed amount hai, confirmed
+  official visa fee nahi. Official fee 2100 INR hai; separate service
+  components ki actual final fees/tax client confirm kare.
+- Packages sample itineraries hain. Prices tabhi add karo jab actual
+  confirmed supplier rates mil jaayein.
+- Contact form bina client WhatsApp/email ke message copy karta hai;
+  data kisi server pe auto-send nahi hota.
