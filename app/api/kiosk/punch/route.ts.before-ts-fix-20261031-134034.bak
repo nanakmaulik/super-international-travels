@@ -1,0 +1,28 @@
+import {verifyKioskSession} from '@/lib/kiosk-auth';
+import {createHash} from 'crypto';
+import {adminDb,reply} from '@/lib/supabase';
+import {matchFace,parseImage} from '@/lib/face';
+export const runtime='nodejs';
+export async function POST(req:Request){try{
+ const token=req.headers.get('x-kiosk-token')||'';
+ const db=adminDb();
+ let kiosk=await verifyKioskSession(token);
+ if(!kiosk&&/^[a-f0-9]{64}$/.test(token)){const hash=createHash('sha256').update(token).digest('hex');const r=await db.from('kiosks').select('id,organization_id').eq('token_hash',hash).eq('active',true).maybeSingle();kiosk=r.data;}
+
+ if(!kiosk)return reply({error:'Kiosk not authorized'},401);
+ const body=await req.json();if(body.event_type!=='in'&&body.event_type!=='out')return reply({error:'Choose Clock In or Clock Out'},400);
+ const image=parseImage(body.image);
+ const {data:templates,error:templatesError}=await db.from('face_templates').select('employee_id,embedding').eq('organization_id',kiosk.organization_id).eq('model_version','opencv-sface-v1').limit(5000);
+ if(templatesError)throw templatesError;
+ if(!templates?.length)return reply({error:'No enrolled employee faces for this office'},422);
+ const match=await matchFace(image,templates);
+ const {data:emp}=await db.from('employees').select('id,name,organization_id').eq('organization_id',kiosk.organization_id).eq('id',match.employee_id).eq('active',true).maybeSingle();
+ if(!emp)return reply({error:'Employee not active in this workplace'},422);
+ const {data:latest}=await db.from('attendance_events').select('event_type,happened_at').eq('employee_id',emp.id).eq('organization_id',kiosk.organization_id).order('happened_at',{ascending:false}).limit(1).maybeSingle();
+ if(latest?.event_type===body.event_type)return reply({error:`Already clocked ${body.event_type==='in'?'in':'out'}. Ask manager if correction needed.`},409);
+ if(!latest&&body.event_type==='out')return reply({error:'Clock in before clocking out'},409);
+ if(latest&&Date.now()-new Date(latest.happened_at).getTime()<60000)return reply({error:'Please wait one minute before next punch'},429);
+ const {data:event,error}=await db.from('attendance_events').insert({organization_id:kiosk.organization_id,employee_id:emp.id,kiosk_id:kiosk.id,event_type:body.event_type,method:'face',similarity:Math.round(Number(match.similarity)*10000)/100}).select().single();
+ if(error)throw error;
+ return reply({ok:true,employee:emp.name,event_type:event.event_type,time:event.happened_at});
+}catch(e:any){return reply({error:e?.message||'Unable to process face scan'},400)}}

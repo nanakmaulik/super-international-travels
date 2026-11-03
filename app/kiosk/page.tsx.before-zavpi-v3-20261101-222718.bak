@@ -1,0 +1,152 @@
+'use client';
+import {useEffect,useRef,useState} from 'react';
+
+type Mode='in'|'out';
+export default function Kiosk(){
+  const [token,setToken]=useState('');
+  const [entry,setEntry]=useState('');
+  const [kioskPassword,setKioskPassword]=useState('');
+  const [showPassword,setShowPassword]=useState(false);
+  const [device,setDevice]=useState<{name:string;organization:string}|null>(null);
+  const [checking,setChecking]=useState(false);
+  const [showSettings,setShowSettings]=useState(false);
+  const [time,setTime]=useState(()=>new Date());
+  const [status,setStatus]=useState('');
+  const [success,setSuccess]=useState(false);
+  const [busy,setBusy]=useState(false);
+  const [ready,setReady]=useState(false);
+  const [online,setOnline]=useState(true);
+  const [installHint,setInstallHint]=useState(false);
+  const video=useRef<HTMLVideoElement>(null);
+  const stream=useRef<MediaStream|null>(null);
+  const wake=useRef<any>(null);
+  const clearStatus=useRef<ReturnType<typeof setTimeout>|null>(null);
+
+  useEffect(()=>{
+    const saved=localStorage.getItem('workpulse-kiosk-session')||'';
+    if(saved){fetch('/api/kiosk/login',{headers:{authorization:`Bearer ${saved}`},cache:'no-store'}).then(async r=>{const j=await r.json();if(!r.ok)throw Error(j.error);setToken(saved);setDevice(j.device)}).catch(()=>{localStorage.removeItem('workpulse-kiosk-session');setStatus('Session expired or device revoked. Please sign in again.')});}
+    setOnline(navigator.onLine);
+    const t=setInterval(()=>setTime(new Date()),1000);
+    const onOnline=()=>setOnline(navigator.onLine);
+    window.addEventListener('online',onOnline);
+    window.addEventListener('offline',onOnline);
+    if('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js',{scope:'/'}).catch(()=>{});
+    return()=>{
+      clearInterval(t);
+      window.removeEventListener('online',onOnline);
+      window.removeEventListener('offline',onOnline);
+      stream.current?.getTracks().forEach(track=>track.stop());
+      wake.current?.release?.().catch(()=>{});
+      if(clearStatus.current)clearTimeout(clearStatus.current);
+    };
+  },[]);
+
+  async function keepScreenOn(){
+    try{if('wakeLock' in navigator)wake.current=await (navigator as any).wakeLock.request('screen');}catch{}
+  }
+  async function start(){
+    setStatus('');setSuccess(false);
+    try{
+      if(!navigator.mediaDevices?.getUserMedia) throw Error('Camera unavailable. Use HTTPS or localhost and allow camera permissions.');
+      stream.current?.getTracks().forEach(x=>x.stop());
+      const s=await navigator.mediaDevices.getUserMedia({video:{facingMode:'user',width:{ideal:960},height:{ideal:720}},audio:false});
+      stream.current=s;
+      if(video.current){video.current.srcObject=s;await video.current.play();}
+      setReady(true);await keepScreenOn();
+      setStatus('Camera ready. Face ko frame mein rakhein aur Clock In ya Clock Out tap karein.');
+    }catch(e:any){setReady(false);setStatus('Camera error: '+(e?.message||'Permission denied'));}
+  }
+  async function punch(event_type:Mode){
+    if(busy)return;
+    if(!online){setStatus('Device offline. Attendance save nahi hui. Internet connect karein.');setSuccess(false);return;}
+    if(!ready||!video.current?.videoWidth){setStatus('Pehle Start Camera tap karein.');setSuccess(false);return;}
+    setBusy(true);setSuccess(false);setStatus('Face verify ho raha hai…');
+    try{
+      const c=document.createElement('canvas');
+      c.width=640;c.height=Math.round(video.current.videoHeight/video.current.videoWidth*640);
+      c.getContext('2d')!.drawImage(video.current,0,0,c.width,c.height);
+      const r=await fetch('/api/kiosk/punch',{method:'POST',headers:{'Content-Type':'application/json','x-kiosk-token':token},body:JSON.stringify({image:c.toDataURL('image/jpeg',.84),event_type}),cache:'no-store'});
+      const j=await r.json();
+      if(!r.ok)throw Error(j.error||'Punch failed');
+      setSuccess(true);
+      setStatus(`${j.employee} — ${event_type==='in'?'CLOCK IN':'CLOCK OUT'} successful • ${new Date(j.time).toLocaleTimeString([],{hour:'numeric',minute:'2-digit',hour12:true})}`);
+      if(clearStatus.current)clearTimeout(clearStatus.current);
+      clearStatus.current=setTimeout(()=>{setStatus('Next employee ready');setSuccess(false)},5500);
+    }catch(e:any){setStatus('Attendance save nahi hui: '+(e?.message||'Try again'));setSuccess(false);}
+    finally{setBusy(false);}
+  }
+  async function activate(){
+    const login_id=entry.trim().toUpperCase();
+    if(!login_id||!kioskPassword){setStatus('Enter kiosk ID and password.');return;}
+    setChecking(true);setStatus('Signing in securely…');
+    try{
+      const r=await fetch('/api/kiosk/login',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({login_id,password:kioskPassword}),cache:'no-store'});
+      const j=await r.json();if(!r.ok)throw Error(j.error||'Unable to sign in');
+      localStorage.setItem('workpulse-kiosk-session',j.session);setToken(j.session);setDevice(j.device);setEntry('');setKioskPassword('');setStatus('Attendance device signed in. Start the camera to take attendance.');
+    }catch(e:any){setStatus(e.message||'Sign in failed.');}finally{setChecking(false);}
+  }
+  function deactivate(){if(!window.confirm('Sign this office device out? Attendance will stop until it is activated again.'))return;localStorage.removeItem('workpulse-kiosk-session');stream.current?.getTracks().forEach(x=>x.stop());stream.current=null;setReady(false);setToken('');setDevice(null);setShowSettings(false);setStatus('Device signed out');}
+  return <main className="wp-kiosk">
+    <header className="wp-kiosk-header"><div className="wp-kiosk-logo"><span className="wp-kiosk-symbol">◉</span><img src="/zavpi-logo.png" alt="Zavpi" className="zavpi-kiosk-logo" /></div><div className={'wp-kiosk-online '+(online?'':'is-offline')}><i/>{online?'Online':'Offline'}</div></header>
+    <section className="wp-kiosk-panel" aria-label="WorkPulse face attendance kiosk">
+      <div className="wp-kiosk-subtitle">OFFICE FACE ATTENDANCE</div>
+      <div className="wp-kiosk-time">{time.toLocaleTimeString([],{hour:'numeric',minute:'2-digit',hour12:true})}</div>
+      <div className="wp-kiosk-date">{time.toLocaleDateString([],{weekday:'long',day:'numeric',month:'long',year:'numeric'})}</div>
+      {!token?<form className="wp-kiosk-activation wp-kiosk-signin" onSubmit={e=>{e.preventDefault();activate();}}><div className="wp-kiosk-activation-icon">▣</div><div className="wp-kiosk-login-tag">ATTENDANCE DEVICE LOGIN</div><h1>Welcome to WorkPulse</h1><p className="wp-kiosk-login-text">Sign in with the credentials provided by your company administrator. Employees simply scan their face after sign-in.</p><label htmlFor="kiosk-id">Attendance Device ID</label><input id="kiosk-id" type="text" autoComplete="username" autoCapitalize="characters" spellCheck={false} value={entry} onChange={e=>setEntry(e.target.value)} placeholder="Enter your Device ID" required/><label htmlFor="kiosk-pass">Attendance Device Password</label>
+<div style={{
+  display:'flex',
+  alignItems:'stretch',
+  width:'100%',
+  gap:8
+}}>
+  <input
+    id="kiosk-pass"
+    type={showPassword?'text':'password'}
+    autoComplete="current-password"
+    value={kioskPassword}
+    onChange={e=>setKioskPassword(e.target.value)}
+    placeholder="Enter Attendance Device Password"
+    style={{flex:'1 1 0',minWidth:0,width:'auto'}}
+    required
+  />
+  <button
+    type="button"
+    aria-label={showPassword?'Hide password':'Show password'}
+    aria-pressed={showPassword}
+    onClick={()=>setShowPassword(v=>!v)}
+    style={{
+      flex:'0 0 52px',
+      width:52,
+      minHeight:52,
+      border:'1px solid #cbd5e1',
+      borderRadius:12,
+      background:'#fff',
+      color:'#334155',
+      display:'flex',
+      alignItems:'center',
+      justifyContent:'center',
+      cursor:'pointer',
+      padding:0
+    }}
+  >
+    {showPassword?'🙈':'👁'}
+  </button>
+</div>
+<button type="submit" disabled={checking||!online||!entry.trim()||!kioskPassword} className="wp-kiosk-primary">{checking?'Verifying credentials…':'Sign In to Attendance Device →'}</button><div className="wp-kiosk-login-help"><span>Need device credentials?</span><small>Company dashboard → Office Kiosks → Add Device</small></div><div className="wp-kiosk-device-note">🔒 Device-only access. Payroll and employee information remain private.</div></form>:<>
+        {device&&<div className="wp-kiosk-device-banner"><span>▣ {device.organization}</span><strong>{device.name}</strong></div>}
+        <div className="wp-kiosk-preview">
+          <video ref={video} autoPlay playsInline muted aria-label="Front camera live preview"/>
+          {!ready&&<div className="wp-kiosk-overlay"><div className="wp-kiosk-face-icon">◎</div><strong>Ready to scan?</strong><span>Camera permission allow karke start karein</span><button className="wp-kiosk-primary" onClick={start}>Start Camera</button></div>}
+          {ready&&<div className="wp-kiosk-scan-frame" aria-hidden="true"/>}
+          {busy&&<div className="wp-kiosk-processing">Verifying face…</div>}
+        </div>
+        <div className="wp-kiosk-actions"><button type="button" disabled={!ready||busy||!online} className="wp-kiosk-in" onClick={()=>punch('in')}>↳ <span>CLOCK IN</span></button><button type="button" disabled={!ready||busy||!online} className="wp-kiosk-out" onClick={()=>punch('out')}>↗ <span>CLOCK OUT</span></button></div>
+      </>}
+      {!!status&&<div role="status" aria-live="polite" className={'wp-kiosk-status '+(success?'is-success':status.includes('error')||status.includes('nahi hui')?'is-error':'')}>{status}</div>}
+      {token&&<><button className="wp-kiosk-settings" onClick={()=>setShowSettings(v=>!v)}>⚙ Device settings</button>{showSettings&&<div className="wp-kiosk-device-tools"><p>To change office device, sign out and activate with a new key.</p><button onClick={deactivate}>Sign out this device</button></div>}</>}
+      <div className="wp-kiosk-footer">One person per scan • Authorized devices only<br/>Face match does not provide liveness verification</div>
+    </section>
+    <button className="wp-kiosk-install" onClick={()=>setInstallHint(!installHint)}>＋ Add to Home Screen</button>
+    {installHint&&<div className="wp-kiosk-install-guide"><strong>Install WorkPulse Attendance Device</strong><p><b>iPhone / iPad:</b> Safari → Share → Add to Home Screen → Add.</p><p><b>Android:</b> Chrome → ⋮ → Add to Home screen / Install app.</p><p>Installed app opens directly into this attendance device. Internet is required to record attendance.</p><button onClick={()=>setInstallHint(false)}>Got it</button></div>}
+  </main>;
+}

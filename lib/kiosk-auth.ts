@@ -1,0 +1,8 @@
+import {createHmac,randomBytes,scryptSync,timingSafeEqual} from 'node:crypto';
+import {adminDb} from '@/lib/supabase';
+const key=()=>{const secret=process.env.KIOSK_SESSION_SECRET||'';if(secret.length<48)throw Error('KIOSK_SESSION_SECRET must be configured with at least 48 characters');return secret;};
+export function hashPassword(password:string){const salt=randomBytes(16).toString('hex');return salt+':'+scryptSync(password,salt,64).toString('hex');}
+export function verifyPassword(password:string,stored:string){try{const [salt,hash]=stored.split(':');if(!/^[a-f0-9]{32}$/.test(salt)||!/^[a-f0-9]{128}$/.test(hash))return false;return timingSafeEqual(scryptSync(password,salt,64),Buffer.from(hash,'hex'));}catch{return false;}}
+const signature=(payload:string)=>createHmac('sha256',key()).update(payload).digest('base64url');
+export function createKioskSession(kioskId:string){const payload=Buffer.from(JSON.stringify({id:kioskId,exp:Date.now()+7*86400000})).toString('base64url');return payload+'.'+signature(payload);}
+export async function verifyKioskSession(value:string){try{const [payload,sig]=value.split('.');if(!payload||!sig)return null;const expected=signature(payload);if(expected.length!==sig.length||!timingSafeEqual(Buffer.from(expected),Buffer.from(sig)))return null;const data=JSON.parse(Buffer.from(payload,'base64url').toString());if(typeof data.id!=='string'||typeof data.exp!=='number'||Date.now()>data.exp)return null;const {data:kiosk}=await adminDb().from('kiosks').select('id,name,organization_id,active').eq('id',data.id).eq('active',true).maybeSingle();return kiosk||null;}catch{return null;}}

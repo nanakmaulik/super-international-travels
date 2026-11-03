@@ -1,0 +1,8 @@
+import {adminDb,reply} from '@/lib/supabase';
+import {verifyPassword,createKioskSession,verifyKioskSession} from '@/lib/kiosk-auth';
+export const runtime='nodejs';
+export async function POST(req:Request){try{const b=await req.json();const id=String(b.login_id||'').trim().toUpperCase(),password=String(b.password||'');if((!/^.{3,64}$/u.test(id)||/[\u0000-\u001F\u007F]/u.test(id))||password.length<10)return reply({error:'Invalid kiosk ID or password'},401);const db=adminDb();const {data,error}=await db.from('kiosks').select('id,name,organization_id,password_hash').eq('login_id',id).eq('active',true).maybeSingle();if(error)throw error;if(!data?.password_hash||!verifyPassword(password,data.password_hash))return reply({error:'Invalid kiosk ID or password'},401);const {data:org}=await db.from('organizations').select('name').eq('id',data.organization_id).maybeSingle();return reply({ok:true,session:createKioskSession(data.id),device:{name:data.name,organization:org?.name||'Your company'}});}catch(e){
+console.error('Attendance device login server error:',e);
+return reply({error:'Attendance login service unavailable. Please contact your administrator.'},503);
+}}
+export async function GET(req:Request){const session=req.headers.get('authorization')?.replace(/^Bearer\s+/i,'')||'';const kiosk=await verifyKioskSession(session);if(!kiosk)return reply({error:'Please sign in again'},401);const {data:org}=await adminDb().from('organizations').select('name').eq('id',kiosk.organization_id).maybeSingle();return reply({ok:true,device:{name:kiosk.name,organization:org?.name||'Your company'}});}
