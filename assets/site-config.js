@@ -8,9 +8,9 @@
 */
 window.SIT_CONFIG = {
   brand: "Super International Travels",
-  whatsapp: "",
-  phone: "",
-  email: "",
-  address: "",
+  whatsapp: "919592929252",
+  phone: "+91 9592929252",
+  email: "sales@supertravelsonline.com",
+  address: "53 Court Road, Opp. G.P.O., Court Road, Amritsar 143001",
   logoFile: "logo-placeholder.svg"
 };

@@ -23,9 +23,44 @@
   document.querySelectorAll('[data-email-display]').forEach(el => el.textContent = config.email || 'Business email to be added');
   document.querySelectorAll('[data-phone-display]').forEach(el => el.textContent = config.phone || 'Business phone number to be added');
   document.querySelectorAll('[data-address-display]').forEach(el => el.textContent = config.address || 'Office address to be added');
+
+  const sitLink = (selector, url) => {
+    document.querySelectorAll(selector).forEach(el => {
+      if (!url || el.querySelector('a')) return;
+      const a = document.createElement('a');
+      a.href = url;
+      a.textContent = el.textContent;
+      a.style.color = 'inherit';
+      a.style.textDecoration = 'underline';
+      a.style.textUnderlineOffset = '3px';
+      if (url.startsWith('https://')) {
+        a.target = '_blank';
+        a.rel = 'noopener noreferrer';
+      }
+      el.replaceChildren(a);
+    });
+  };
+  if (config.email)
+    sitLink('[data-email-display]', 'mailto:' + config.email);
+  if (config.phone)
+    sitLink('[data-phone-display]', 'tel:' + config.phone.replace(/[^+\d]/g, ''));
+  if (config.address)
+    sitLink('[data-address-display]',
+      'https://www.google.com/maps/search/?api=1&query=' +
+      encodeURIComponent(config.address));
   document.querySelectorAll('[data-contact-links]').forEach(el => {
     if (config.email) { const a = document.createElement('a'); a.textContent = config.email; a.href = 'mailto:' + config.email; el.appendChild(a); }
     if (config.phone) { const a = document.createElement('a'); a.textContent = config.phone; a.href = 'tel:' + config.phone.replace(/[^\d+]/g, ''); el.appendChild(a); }
+    if (config.whatsapp) {
+      const a = document.createElement('a');
+      a.textContent = 'Chat on WhatsApp';
+      a.href = 'https://wa.me/' +
+        String(config.whatsapp).replace(/\D/g, '');
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      el.appendChild(a);
+    }
+
   });
 
   // Destination filter, works offline or when hosted on a static platform.
